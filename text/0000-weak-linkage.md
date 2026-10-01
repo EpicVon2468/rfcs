@@ -6,8 +6,8 @@
 ## Summary
 [summary]: #summary
 
-This RFC aims to address shortcomings in Rust's FFI interoperability – specifically relating to [weak linkage](https://en.wikipedia.org/wiki/Weak_symbol) – by replacing the hack implementation currently present (although perma-unstable) in the language with a more direct analogue.
-This RFC is not a replacement for the high-level feature "Externally Implementable Items", and aims to target low-level, primarily FFI-related use-cases.
+This RFC aims to address shortcomings in Rust's FFI interoperability – specifically relating to [weak linkage](https://en.wikipedia.org/wiki/Weak_symbol) – by replacing the perma-unstable hack implementation currently present with a more direct analogue in the form of an attribute.<br>
+This RFC is not (and should not be used as) a replacement for the high-level feature [Externally Implementable Items](https://github.com/rust-lang/rust/issues/125418).<br>
 Please note that when "weak linkage" is used here, it refers to "weak definitions" (`weak` in LLVM) rather than "weak references" (`extern_weak` in LLVM).
 
 ## Motivation
@@ -26,15 +26,35 @@ As Rust matures and is used more and more (especially in embedded contexts or po
 ## Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
+<!-- Can't use tabulators for this because they're rendered as size 8 on GitHub :( -->
+
 ```log
 warning: use of `#[linkage = "weak"]` is deprecated
-  --> <source>:04:15
+  --> <source>:04:14
    |
-04 |		#[linkage = "weak"]
-   |					^^^^^^
+04 |    #[linkage = "weak"]
+   |                ^^^^^^
    |
-   = help: consider using `#[weak]` and unwrapping the type to its pointee instead
+   = help: consider using `#[unsafe(weak)]` and unwrapping the type to its pointee instead
    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+```
+
+```log
+error[E####]: the `#[unsafe(weak)]` attribute cannot be applied to an externally implementable item
+  --> <source>:05:11
+   |
+05 |    #[unsafe(weak)]
+   |             ^^^^
+   |
+note: item was declared externally implementable here
+  --> <source>:04:04
+   |
+04 |    #[eii(eii1)]
+   |      ^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E####`.
 ```
 
 <!-- Explain the proposal as if it was already included in the language and you were teaching it to another Rust programmer. That generally means: -->
@@ -51,23 +71,30 @@ warning: use of `#[linkage = "weak"]` is deprecated
 ## Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-An attribute – `#[weak]` – shall be defined, which may be applied to the following language items:
+An attribute – `#[unsafe(weak)]` – shall be defined, which may be applied to the following language items:
 
-- Statics and functions in `extern` blocks; and
-- Statics and functions which are `extern` and marked with `#[unsafe(no_mangle)]`.
+- `static` items in `extern` blocks;
+- `fn` items in `extern` blocks;
+- `static` items attributed with `#[unsafe(no_mangle)]`; and
+- `extern fn` items attributed with `#[unsafe(no_mangle)]`.
 
-Any item which has the `#[weak]` attribute should cause the following:
+The attribute should be considered unsafe, as it affects ABI and can potentially cause the symbol resolved at link-time to be in an unknown state of safety.
+Applying the `#[unsafe(weak)]` attribute to an externally implementable item shall be considered a compile-time error.
 
-- For ELF output, the symbol should be marked `STB_WEAK`;
-- For Mach-O output, the symbol should be marked `N_WEAK_DEF`; and
-- For COFF/PE output, the symbol should be marked `IMAGE_SYM_CLASS_WEAK_EXTERNAL`.
+Any item which has the `#[unsafe(weak)]` attribute should cause the following:
+
+- For ELF output, the resulting symbol should be marked `STB_WEAK`;
+- For COFF/PE output, the resulting symbol should be marked `IMAGE_SYM_CLASS_WEAK_EXTERNAL`; and
+- For Mach-O output, the resulting symbol should be marked `N_WEAK_DEF` if the item had a definition (a function body or static initialiser), otherwise it should be marked `N_WEAK_REF`.
 
 When using the LLVM backend, the above can be achieved via the `weak` linkage type.
+
+Implementation details for how these markers affect linkage is backend / linker dependent; `rustc` should make no guarantees about the behaviour other than that the relevant marker will be applied to the resulting symbol.
 
 ## Drawbacks
 [drawbacks]: #drawbacks
 
-There are some issues with `rustc` causing errors when LTO is enabled and weak symbols are present.<br>
+There are some existing issues with `rustc` causing errors when LTO is enabled and weak symbols are present.<br>
 See also: <https://github.com/rust-lang/rust/issues/29603#issuecomment-5869051585>
 
 ## Rationale and alternatives
@@ -95,12 +122,12 @@ LLVM IR's `weak` linkage type:
 [unresolved-questions]: #unresolved-questions
 
 - Attribute name bikeshedding;
-- Should the attribute be considered `unsafe`; and
+- Should there be a strict requirement for `#[unsafe(no_mangle)]` to be applied to items which have the `#[unsafe(weak)]` attribute; and
 - Implementation details for compiler backends other than LLVM.
 
 ## Future possibilities
 [future-possibilities]: #future-possibilities
 
 A related but out-of-scope feature is "weak references" (`extern_weak` in LLVM), which allows that a symbol may not exist (being treated as "null", should it not exist).<br>
-It is more than likely that "weak references" require a more substantial language implementation, such as an FFI type, rather than a mere function attribute (see [this issue comment](https://github.com/rust-lang/rust/issues/29603#issuecomment-966900393)).<br>
+It is more than likely that "weak references" require a more substantial language implementation, such as an FFI type, rather than a mere attribute (see [this issue comment](https://github.com/rust-lang/rust/issues/29603#issuecomment-966900393)).<br>
 Name bikeshedding between "weak references" and "weak definitions" will be needed in future.

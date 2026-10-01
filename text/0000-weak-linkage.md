@@ -40,6 +40,20 @@ warning: use of `#[linkage = "weak"]` is deprecated
 ```
 
 ```log
+error[E####]: the `#[unsafe(weak)]` attribute cannot be applied to an exported item without an explicit link name
+  --> <source>:04:11
+   |
+04 |    #[unsafe(weak)]
+   |             ^^^^
+   |
+help: consider applying either the `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]` attribute
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E####`.
+```
+
+```log
 error[E####]: the `#[unsafe(weak)]` attribute cannot be applied to an externally implementable item
   --> <source>:05:11
    |
@@ -75,11 +89,12 @@ An attribute – `#[unsafe(weak)]` – shall be defined, which may be applied to
 
 - `static` items in `extern` blocks;
 - `fn` items in `extern` blocks;
-- `static` items attributed with `#[unsafe(no_mangle)]`; and
-- `extern fn` items attributed with `#[unsafe(no_mangle)]`.
+- `static` items attributed with `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`; and
+- `extern fn` items attributed with `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`.
 
-The attribute should be considered unsafe, as it affects ABI and can potentially cause the symbol resolved at link-time to be in an unknown state of safety.
-Applying the `#[unsafe(weak)]` attribute to an externally implementable item shall be considered a compile-time error.
+The attribute shall be considered unsafe, as it affects ABI and can potentially cause the symbol resolved at link-time to be in an unknown state of safety.<br>
+Applying the `#[unsafe(weak)]` attribute to an externally implementable item shall be considered a compile-time error.<br>
+Applying the `#[unsafe(weak)]` attribute to an item which does not have an explicit link name specified (either via `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`) shall be considered a compile-time error.
 
 Any item which has the `#[unsafe(weak)]` attribute should cause the following:
 
@@ -89,7 +104,7 @@ Any item which has the `#[unsafe(weak)]` attribute should cause the following:
 
 When using the LLVM backend, the above can be achieved via the `weak` linkage type.
 
-Implementation details for how these markers affect linkage is backend / linker dependent; `rustc` should make no guarantees about the behaviour other than that the relevant marker will be applied to the resulting symbol.
+Implementation details for how these markers affect linkage is platform and linker dependent; `rustc` should make no guarantees about behaviour other than that the relevant marker will be applied to the resulting symbol.
 
 ## Drawbacks
 [drawbacks]: #drawbacks
@@ -121,8 +136,7 @@ LLVM IR's `weak` linkage type:
 ## Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- Attribute name bikeshedding;
-- Should there be a strict requirement for `#[unsafe(no_mangle)]` to be applied to items which have the `#[unsafe(weak)]` attribute; and
+- Attribute name bikeshedding; and
 - Implementation details for compiler backends other than LLVM.
 
 ## Future possibilities

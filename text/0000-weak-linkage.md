@@ -6,15 +6,14 @@
 ## Summary
 [summary]: #summary
 
-This RFC aims to address shortcomings in Rust's implementation (or lack thereof) of the concept of [weak linkage](https://en.wikipedia.org/wiki/Weak_symbol) by introducing a direct analogue to weak linkage in the form of an attribute.<br>
+This RFC aims to address shortcomings in Rust's FFI interoperability – specifically relating to [weak linkage](https://en.wikipedia.org/wiki/Weak_symbol) – by replacing the hack implementation currently present (although perma-unstable) in the language with a more direct analogue.
+This RFC is not a replacement for the high-level feature "Externally Implementable Items", and aims to target low-level, primarily FFI-related use-cases.
 Please note that when "weak linkage" is used here, it refers to "weak definitions" (`weak` in LLVM) rather than "weak references" (`extern_weak` in LLVM).
 
 ## Motivation
 [motivation]: #motivation
 
-As Rust is increasingly used for embedded & low-level development, being able to easily interface with ABI & FFI is crucial to reduce friction of use.<br>
-One of these FFI concepts which Rust currently falls short is weak linkage; A feature does currently exist to address linkage in Rust, but it is mostly for internal `std` use, and suffers from issues related to trying to mitigate type semantic and invariant violations.
-<!-- TODO: Reword a little here, make it easier to segue into talking about the shortcomings of `#[linkage = "weak"]` -->
+As Rust matures and is used more and more (especially in embedded contexts or ports of / bindings to C libraries), it is increasingly important that FFI parity for low-level platform features is provided for users of the language.
 
 <!-- Any changes to Rust should focus on solving a problem that users of Rust are having. -->
 <!-- This section should explain this problem in detail, including necessary background. -->
@@ -28,7 +27,7 @@ One of these FFI concepts which Rust currently falls short is weak linkage; A fe
 [guide-level-explanation]: #guide-level-explanation
 
 ```log
-warning: use of `#[linkage = "weak"]` is deprecated.
+warning: use of `#[linkage = "weak"]` is deprecated
   --> <source>:04:15
    |
 04 |		#[linkage = "weak"]
@@ -52,27 +51,24 @@ warning: use of `#[linkage = "weak"]` is deprecated.
 ## Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-An attribute shall be defined, which may be applied to the following language items:
+An attribute – `#[weak]` – shall be defined, which may be applied to the following language items:
 
 - Statics and functions in `extern` blocks; and
 - Statics and functions which are `extern` and marked with `#[unsafe(no_mangle)]`.
 
-<!-- This is the technical portion of the RFC. Explain the design in sufficient detail that: -->
+Any item which has the `#[weak]` attribute should cause the following:
 
-<!-- - Its interaction with other features is clear. -->
-<!-- - It is reasonably clear how the feature would be implemented. -->
-<!-- - Corner cases are dissected by example. -->
+- For ELF output, the symbol should be marked `STB_WEAK`;
+- For Mach-O output, the symbol should be marked `N_WEAK_DEF`; and
+- For COFF/PE output, the symbol should be marked `IMAGE_SYM_CLASS_WEAK_EXTERNAL`.
 
-<!-- The section should return to the examples given in the previous section, and explain more fully how the detailed proposal makes those examples work. -->
+When using the LLVM backend, the above can be achieved via the `weak` linkage type.
 
 ## Drawbacks
 [drawbacks]: #drawbacks
 
-There appears to be a lack of consistency between platforms in stability and functionality of weak linkage, and there are some issues with `rustc` causing errors when LTO is enabled and weak symbols are present.<br>
+There are some issues with `rustc` causing errors when LTO is enabled and weak symbols are present.<br>
 See also: <https://github.com/rust-lang/rust/issues/29603#issuecomment-5869051585>
-
-As `rustc` is not a linker, the soundness & compliance of weak linkage would be reliant on any given linker treating the `weak` attribute in a deterministic, accurate manner.<br>
-This would also mean a reliance on compiler backends to not change the semantics of the `weak` attribute.
 
 ## Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -99,9 +95,8 @@ LLVM IR's `weak` linkage type:
 [unresolved-questions]: #unresolved-questions
 
 - Attribute name bikeshedding;
-- Should the attribute be considered `unsafe`, as `rustc` cannot verify the symbol which ends up being resolved at link-time matches the function prototype or type that is expected;
-- Implementation details for non-ELF-based platforms (apparently [Windows has issues](https://github.com/rust-lang/rust/issues/29603#issuecomment-5866715657)); and
-- Implementation details for other compiler backends than LLVM.
+- Should the attribute be considered `unsafe`; and
+- Implementation details for compiler backends other than LLVM.
 
 ## Future possibilities
 [future-possibilities]: #future-possibilities

@@ -87,20 +87,20 @@ For more information about this error, try `rustc --explain E####`.
 
 An attribute – `#[unsafe(weak)]` – shall be defined, which may be applied to the following language items:
 
-- `static` items in `extern` blocks;
-- `fn` items in `extern` blocks;
-- `static` items attributed with `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`; and
-- `extern fn` items attributed with `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`.
+- `static` items that have an initialiser and are attributed with either `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`; and
+- `fn` items that have a function body and are attributed with either `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`.
 
 The attribute shall be considered unsafe, as it affects ABI and can potentially cause the symbol resolved at link-time to be in an unknown state of safety.<br>
+Applying the `#[unsafe(weak)]` attribute to an item which does not have a definition (a function body or static initialiser) shall be considered a compile-time error.<br>
+Applying the `#[unsafe(weak)]` attribute to an item which does not have an explicit link name specified (either via `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`) shall be considered a compile-time error.<br>
 Applying the `#[unsafe(weak)]` attribute to an externally implementable item shall be considered a compile-time error.<br>
-Applying the `#[unsafe(weak)]` attribute to an item which does not have an explicit link name specified (either via `#[unsafe(no_mangle)]` or `#[unsafe(export_name = ...)]`) shall be considered a compile-time error.
+Applying the `#[unsafe(weak)]` attribute to an item shall prevent `rustc` from performing any inlining on that item, even if explicitly requested with the `#[inline]` attribute.
 
 Any item which has the `#[unsafe(weak)]` attribute should cause the following:
 
 - For ELF output, the resulting symbol should be marked `STB_WEAK`;
-- For COFF/PE output, the resulting symbol should be marked `IMAGE_SYM_CLASS_WEAK_EXTERNAL`; and
-- For Mach-O output, the resulting symbol should be marked `N_WEAK_DEF` if the item had a definition (a function body or static initialiser), otherwise it should be marked `N_WEAK_REF`.
+- For Mach-O output, the resulting symbol should be marked `N_WEAK_DEF`; and
+- For COFF/PE output, the resulting symbol should be marked `IMAGE_SYM_CLASS_WEAK_EXTERNAL`.
 
 When using the LLVM backend, the above can be achieved via the `weak` linkage type.
 
@@ -136,7 +136,8 @@ LLVM IR's `weak` linkage type:
 ## Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- Attribute name bikeshedding; and
+- Attribute name bikeshedding;
+- Should `rustc` emit a warning if an item has the `#[unsafe(weak)]` attribute and the `#[inline]` attribute at the same time; and
 - Implementation details for compiler backends other than LLVM.
 
 ## Future possibilities
